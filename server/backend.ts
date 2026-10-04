@@ -42,6 +42,11 @@ import { isObject } from '../shared/is-object.ts'
 
 /** Listen address; defaults to loopback so the server stays local unless overridden. */
 const host = process.env.PI_LIVECRAFT_HOST ?? '127.0.0.1'
+/** Default working directory; PI_LIVECRAFT_CWD overrides the stock ~/.pi. */
+const defaultCwd = process.env.PI_LIVECRAFT_CWD ?? '~/.pi'
+/** Resolution root for client paths: pins the server to PI_LIVECRAFT_CWD
+ * when set; null keeps the stock resolution (unset = stock behavior). */
+const cwdRoot = process.env.PI_LIVECRAFT_CWD ? expandHomePath(process.env.PI_LIVECRAFT_CWD) : null
 const port = readPort('PI_LIVECRAFT_BACKEND_PORT', 43_121)
 const managerPort = readPort('PI_LIVECRAFT_MANAGER_PORT', 43_120)
 const manager = new ManagerClient(host, managerPort)
@@ -167,13 +172,13 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
   }
 
   if (method === 'GET' && url.pathname === '/api/sessions/recent') {
-    const cwd = await resolveWorkingDirectory(url.searchParams.get('cwd') ?? '~/.pi')
+    const cwd = await resolveWorkingDirectory(url.searchParams.get('cwd') ?? defaultCwd)
     sendJson(response, 200, await listRecentPiSessions(cwd))
     return
   }
 
   if (method === 'GET' && url.pathname === '/api/directories') {
-    sendJson(response, 200, await listDirectories(url.searchParams.get('path') ?? '~/.pi'))
+    sendJson(response, 200, await listDirectories(url.searchParams.get('path') ?? defaultCwd))
     return
   }
 
@@ -186,13 +191,13 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
   }
 
   if (method === 'GET' && url.pathname === '/api/git') {
-    const cwd = await resolveWorkingDirectory(url.searchParams.get('cwd') ?? '~/.pi')
+    const cwd = await resolveWorkingDirectory(url.searchParams.get('cwd') ?? defaultCwd)
     sendJson(response, 200, await getGitSnapshot(cwd))
     return
   }
 
   if (method === 'GET' && url.pathname === '/api/git/diff') {
-    const cwd = await resolveWorkingDirectory(url.searchParams.get('cwd') ?? '~/.pi')
+    const cwd = await resolveWorkingDirectory(url.searchParams.get('cwd') ?? defaultCwd)
     const path = url.searchParams.get('path')
     if (!path) throw new HttpError(400, 'File path is required')
     sendJson(
@@ -204,7 +209,7 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
   }
 
   if (method === 'GET' && (url.pathname === '/api/files' || url.pathname === '/api/files/path')) {
-    const cwd = await resolveWorkingDirectory(url.searchParams.get('cwd') ?? '~/.pi')
+    const cwd = await resolveWorkingDirectory(url.searchParams.get('cwd') ?? defaultCwd)
     const path = url.searchParams.get('path')
     if (!path) throw new HttpError(400, 'File path is required')
     try {
@@ -240,7 +245,7 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
   }
 
   if (method === 'GET' && url.pathname === '/api/todos') {
-    const cwd = await resolveWorkingDirectory(url.searchParams.get('cwd') ?? '~/.pi')
+    const cwd = await resolveWorkingDirectory(url.searchParams.get('cwd') ?? defaultCwd)
     sendJson(response, 200, await loadWorkspaceTodos(cwd))
     return
   }
@@ -372,7 +377,7 @@ async function route(request: IncomingMessage, response: ServerResponse): Promis
 
   if (method === 'POST' && url.pathname === '/api/sessions') {
     const body = await readJsonBody(request)
-    const cwd = await resolveWorkingDirectory(typeof body.cwd === 'string' ? body.cwd : '~/.pi')
+    const cwd = await resolveWorkingDirectory(typeof body.cwd === 'string' ? body.cwd : defaultCwd)
     if (typeof body.sessionPath === 'string') {
       const session = await loadPiSession(body.sessionPath)
       if (session.cwd !== cwd)
@@ -530,7 +535,7 @@ async function resolveWorkingDirectory(input: string): Promise<string> {
   const expanded = expandHomePath(trimmed)
   let canonical: string
   try {
-    canonical = await realpath(expanded)
+    canonical = await realpath(cwdRoot ? resolve(expanded, cwdRoot) : expanded)
   } catch {
     throw new HttpError(400, 'Working directory does not exist')
   }

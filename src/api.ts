@@ -19,11 +19,7 @@ import { isObject } from '../shared/is-object.ts'
 
 /**
  * API prefix bound at build time from PI_LIVECRAFT_BASE_PATH (injected by
- * Vite's define, see vite.config.ts): the bundle calls the backend under
- * the same path prefix it is served at, and a proxy that strips the prefix
- * (e.g. a tunnel) forwards the calls to the backend root. At the default
- * root base, and outside the Vite bundle (node tests), this is '' and
- * calls go to /api/....
+ * Vite's define, see vite.config.ts)
  */
 const apiBase = (globalThis as { __API_BASE__?: string }).__API_BASE__ ?? ''
 
